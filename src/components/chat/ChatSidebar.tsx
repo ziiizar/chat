@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Share2 } from "lucide-react";
 import ChatListItem from "./ChatListItem";
 import NewChatDialog from "./NewChatDialog";
 import { chatService, Chat } from "@/lib/chat";
 import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
 
 interface ChatSidebarProps {
   selectedChatId?: string;
@@ -33,7 +34,19 @@ const ChatSidebar = ({
     loadChats();
   }, []);
 
+  const handleInvite = () => {
+    const message = encodeURIComponent(
+      "🎵 El disco de Bad Bunny está bueno! 🔥\n\n" +
+        "¡Hey! Te invito a unirte a nuestra app de chat. Aquí podemos hablar sobre música, crear grupos y compartir más recomendaciones. \n\n" +
+        "Únete aquí: https://recursing-black1-mmclc.dev.tempolabs.ai",
+    );
+    window.open(`https://wa.me/?text=${message}`, "_blank");
+  };
+
   const filteredChats = chats.filter((chat) => {
+    if (chat.is_group) {
+      return chat.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    }
     const otherParticipants = chat.participants.filter(
       (p) => p.id !== user?.id,
     );
@@ -45,6 +58,9 @@ const ChatSidebar = ({
   });
 
   const getChatName = (chat: Chat) => {
+    if (chat.is_group) {
+      return chat.name || "Unnamed Group";
+    }
     const otherParticipants = chat.participants.filter(
       (p) => p.id !== user?.id,
     );
@@ -52,6 +68,9 @@ const ChatSidebar = ({
   };
 
   const getChatAvatar = (chat: Chat) => {
+    if (chat.is_group) {
+      return undefined; // Will show group icon instead
+    }
     const otherParticipants = chat.participants.filter(
       (p) => p.id !== user?.id,
     );
@@ -61,7 +80,17 @@ const ChatSidebar = ({
   return (
     <div className="w-[280px] h-full border-r bg-white flex flex-col">
       <div className="p-4 space-y-4 border-b">
-        <NewChatDialog onChatCreated={loadChats} />
+        <div className="flex gap-2">
+          <NewChatDialog onChatCreated={loadChats} />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleInvite}
+            className="shrink-0"
+          >
+            <Share2 className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
           <Input
@@ -87,6 +116,7 @@ const ChatSidebar = ({
                 lastMessage={chat.last_message?.content || ""}
                 timestamp={chat.last_message?.created_at || chat.created_at}
                 unreadCount={chat.unread_count}
+                isGroup={chat.is_group}
               />
             </div>
           ))}

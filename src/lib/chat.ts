@@ -12,6 +12,9 @@ export interface Chat {
   id: string;
   created_at: string;
   updated_at: string;
+  is_group: boolean;
+  name?: string;
+  created_by?: string;
   participants: Profile[];
   last_message?: {
     content: string;
@@ -27,6 +30,11 @@ export interface Message {
   content: string;
   created_at: string;
   sender: Profile;
+}
+
+export interface ChatParticipant {
+  user: Profile;
+  is_admin: boolean;
 }
 
 let messageSubscription: RealtimeChannel | null = null;
@@ -57,7 +65,7 @@ export const chatService = {
     // Get participants for all chats
     const { data: participants, error: participantsError } = await supabase
       .from("chat_participants")
-      .select("chat_id, profiles(*)")
+      .select("chat_id, is_admin, profiles(*)")
       .in("chat_id", chatIds);
 
     if (participantsError) throw participantsError;
@@ -86,6 +94,9 @@ export const chatService = {
         id: chat.id,
         created_at: chat.created_at,
         updated_at: chat.updated_at,
+        is_group: chat.is_group,
+        name: chat.name,
+        created_by: chat.created_by,
         participants: chatParticipants,
         last_message: lastMessage
           ? {
@@ -108,11 +119,24 @@ export const chatService = {
     return profiles || [];
   },
 
-  async createChat(participantIds: string[]): Promise<string> {
+  async createChat(
+    participantIds: string[],
+    isGroup: boolean = false,
+    groupName?: string,
+  ): Promise<string> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     // Insert new chat
     const { data: chatData, error: chatError } = await supabase
       .from("chats")
-      .insert({})
+      .insert({
+        is_group: isGroup,
+        name: groupName,
+        created_by: user.id,
+      })
       .select()
       .single();
 
@@ -122,6 +146,7 @@ export const chatService = {
     const participants = participantIds.map((userId) => ({
       chat_id: chatData.id,
       user_id: userId,
+      is_admin: userId === user.id && isGroup, // Creator is admin for group chats
     }));
 
     const { error: participantError } = await supabase
@@ -157,6 +182,39 @@ export const chatService = {
       content,
       sender_id: senderId,
     });
+
+    if (error) throw error;
+  },
+
+  async addParticipants(chatId: string, userIds: string[]): Promise<void> {
+    const participants = userIds.map((userId) => ({
+      chat_id: chatId,
+      user_id: userId,
+      is_admin: false,
+    }));
+
+    const { error } = await supabase
+      .from("chat_participants")
+      .insert(participants);
+
+    if (error) throw error;
+  },
+
+  async removeParticipant(chatId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from("chat_participants")
+      .delete()
+      .eq("chat_id", chatId)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+  },
+
+  async updateGroupName(chatId: string, name: string): Promise<void> {
+    const { error } = await supabase
+      .from("chats")
+      .update({ name })
+      .eq("id", chatId);
 
     if (error) throw error;
   },
